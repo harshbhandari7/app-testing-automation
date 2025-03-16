@@ -12,10 +12,16 @@
   "activationEvents": [],
   "main": "./extension.js",
   "contributes": {
-    "commands": [{
-      "command": "app-testing-automation.helloWorld",
-      "title": "Hello World"
-    }]
+    "commands": [
+      {
+        "command": "app-testing-automation.helloWorld",
+        "title": "Hello World"
+      },
+      {
+        "command": "extension.openMobilePanel",
+        "title": "Open Mobile Automation Panel"
+      }
+    ]
   },
   "scripts": {
     "lint": "eslint .",
