@@ -1,4 +1,5 @@
 const vscode = require('vscode');
+const { exec } = require('child_process');
 
 function activate(context) {
 	let welcomeNotif = vscode.commands.registerCommand('app-testing-automation.helloWorld', function () {
@@ -16,6 +17,23 @@ function activate(context) {
         );
 
         panel.webview.html = getWebviewContent();
+
+		panel.webview.onDidReceiveMessage(
+            message => {
+                switch (message.command) {
+                    case 'runTestScript':
+                        if (message.script) {
+                            executeAdbCommands(message.script);
+                        } else {
+                            vscode.window.showErrorMessage('No script provided');
+                        }
+                        break;
+                }
+            },
+            undefined,
+            context.subscriptions
+        );
+	
     });
 
     context.subscriptions.push(disposable);
@@ -54,13 +72,38 @@ function getWebviewContent() {
 			</div>
 		</div>
 		<script>
+			const vscode = acquireVsCodeApi();
 			function runTest() {
-				document.getElementById('logs').innerText = "Running test...";
-				// Future step: Execute ADB command here
+				const scriptContent = document.getElementById('script').value;
+				vscode.postMessage({ 
+					command: 'runTestScript',
+					script: scriptContent 
+				});
 			}
+
+			window.addEventListener('message', event => {
+				const message = event.data;
+				if (message.type === 'log') {
+					document.getElementById('logs').textContent += message.content + '\\n';
+				}
+        	});
 		</script>
+		<pre id="logs"></pre>	
 	</body>
 	</html>`;
+}
+
+function executeAdbCommands(script) {
+    const commands = script.split('\n');
+    commands.forEach(command => {
+        exec(`adb shell ${command}`, (error, stdout, stderr) => {
+            if (error) {
+                vscode.window.showErrorMessage(`ADB Error: ${stderr}`);
+            } else {
+                vscode.window.showInformationMessage(`ADB Output: ${stdout}`);
+            }
+        });
+    });
 }
 
 function deactivate() {}
