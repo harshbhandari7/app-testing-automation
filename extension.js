@@ -1,5 +1,5 @@
 const vscode = require('vscode');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 
 function activate(context) {
 	let welcomeNotif = vscode.commands.registerCommand('app-testing-automation.helloWorld', function () {
@@ -18,12 +18,14 @@ function activate(context) {
 
         panel.webview.html = getWebviewContent();
 
+		startEmulatorView(panel);
+
 		panel.webview.onDidReceiveMessage(
             message => {
                 switch (message.command) {
                     case 'runTestScript':
                         if (message.script) {
-                            executeAdbCommands(message.script);
+                            executeAdbCommands(message.script, panel);
                         } else {
                             vscode.window.showErrorMessage('No script provided');
                         }
@@ -57,18 +59,20 @@ function getWebviewContent() {
 	</head>
 	<body>
 		<div class="left-panel">
-			<h3>Test Script Editor</h3>
-			<textarea id="script" rows="40" cols="60"></textarea>
-			<button onclick="runTest()">Run</button>
-		</div>
-		<div class="right-panel">
-			<div class="panel">
-				<h3>Emulator</h3>
-				<p>Emulator output will be displayed here.</p>
+			<div class="panel">	
+				<h3>Test Script Editor</h3>
+				<textarea id="script" rows="18" cols="70"></textarea>
+				<button onclick="runTest()">Run</button>
 			</div>
 			<div class="panel">
 				<h3>Logs</h3>
 				<pre id="logs">Logs will appear here...</pre>
+			</div>
+		</div>
+		<div class="right-panel">
+			<div class="panel">
+				<h3>Emulator</h3>
+				<pre id="emulator">Emulator output will be displayed here...</pre>
 			</div>
 		</div>
 		<script>
@@ -86,6 +90,11 @@ function getWebviewContent() {
 				if (message.type === 'log') {
 					document.getElementById('logs').textContent += message.content + '\\n';
 				}
+
+				if (message.type === 'emulator') {
+                    console.log('Emulator is ready');
+					document.getElementById('emulator').textContent += message.content + '\\n';
+                }
         	});
 		</script>
 		<pre id="logs"></pre>	
@@ -93,16 +102,37 @@ function getWebviewContent() {
 	</html>`;
 }
 
-function executeAdbCommands(script) {
+function executeAdbCommands(script, panel) {
     const commands = script.split('\n');
     commands.forEach(command => {
         exec(`adb shell ${command}`, (error, stdout, stderr) => {
             if (error) {
                 vscode.window.showErrorMessage(`ADB Error: ${stderr}`);
+				panel.webview.postMessage({ type: 'log', content: `\n${new Date().toISOString()}: Command '${command}' Failed with error ${stderr}` });
             } else {
+				console.log(' --- STD OUT ---', { stdout });
                 vscode.window.showInformationMessage(`ADB Output: ${stdout}`);
+				panel.webview.postMessage({ type: 'log', content: `\n${new Date().toISOString()}: Command '${command}' ran successfully.` });
+				panel.webview.postMessage({ type: 'log', content: `Output for Command '${command}': ${stdout}` });
             }
         });
+    });
+}
+
+function startEmulatorView(panel) {
+    const scrcpyProcess = spawn('scrcpy', ['--stay-awake', '--no-audio']);
+
+	console.log('--- Scrcpy Object ---',  { scrcpyProcess });
+    scrcpyProcess.stderr.on('data', (data) => {
+        console.error("Scrcpy Error Message:", data.toString());
+    });
+
+	panel.webview.postMessage({ type: 'emulator', content: '\nEmulator is running' });
+	
+	scrcpyProcess.stdout.on('data', (data) => {
+        console.error("Scrcpy Output Message:", data.toString());
+		panel.webview.postMessage({ type: 'emulator', content: `\n${new Date().toISOString()}: Emulator Output ${data.toString()}` });
+	
     });
 }
 
