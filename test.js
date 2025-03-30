@@ -62,25 +62,24 @@ function getWebviewContent() {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src https: data:; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; frame-src https://appetize.io https://*.appetize.io https://demo.appetize.io;">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src https: data:; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; frame-src https://appetize.io https://*.appetize.io;">
         <title>Mobile Automation</title>
         <style>
             body { display: flex; height: 100vh; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
-            .left-panel { display: flex; flex-direction: column; border-right: 1px solid #ccc; padding: 10px; width: 40%; }
-            .right-panel { display: flex; flex-direction: column; width: 60%; }
+            .left-panel { display: flex; flex-direction: column; border-right: 1px solid #ccc; padding: 10px; width: 50%; }
+            .right-panel { display: flex; flex-direction: column; width: 50%; }
             .panel { flex: 1; border-bottom: 1px solid #ccc; padding: 10px; resize: vertical; overflow: auto; min-height: 100px }
             .panel:last-child { border-right: none; }
             button { margin: 5px; padding: 6px 12px; background-color: #0078D4; color: white; border: none; border-radius: 2px; cursor: pointer; }
             button:hover { background-color: #106EBE; }
             .emulator-container { display: flex; flex-direction: column; height: 100%; }
             .emulator-controls { display: flex; margin-bottom: 10px; }
-            .emulator-frame { border: none; width: 100%; height: 600px; overflow: hidden; }
+            .emulator-frame { flex: 1; border: none; width: 100%; height: 100%; min-height: 400px; }
             .emulator-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #666; }
             .platform-toggle { display: flex; margin-bottom: 10px; }
             .platform-btn { background-color: #f0f0f0; color: #333; }
             .platform-btn.active { background-color: #0078D4; color: white; }
             .device-select { padding: 5px; margin: 5px; }
-            #appetize-container { min-height: 800px; display: flex; flex-direction: column; align-items: center; }
         </style>
     </head>
     <body>
@@ -197,25 +196,45 @@ function getWebviewContent() {
                     // Clear the container
                     container.innerHTML = '';
                     
+                    // Create elements using DOM methods to avoid template string issues
+                    const infoDiv = document.createElement('div');
+                    infoDiv.style.display = 'flex';
+                    infoDiv.style.flexDirection = 'column';
+                    infoDiv.style.alignItems = 'center';
+                    infoDiv.style.justifyContent = 'center';
+                    infoDiv.style.height = '100%';
+                    infoDiv.style.padding = '20px';
+                    
                     // Create heading
-                    // const heading = document.createElement('h3');
-                    // heading.textContent = 'iOS Emulator (' + message.device + ')';
-                    // heading.style.textAlign = 'center';
-                    // heading.style.margin = '0 0 10px 0';
-                    // container.appendChild(heading);
+                    const heading = document.createElement('h3');
+                    heading.textContent = 'iOS Emulator (' + message.device + ')';
+                    infoDiv.appendChild(heading);
                     
-                    // Create iframe
-                    const iframe = document.createElement('iframe');
-                    iframe.src = message.url;
-                    iframe.className = 'emulator-frame';
-                    iframe.style.width = '100%';
-                    iframe.style.height = '800px';
-                    iframe.style.border = 'none';
-                    iframe.allow = 'camera; microphone; autoplay; clipboard-write';
-                    iframe.setAttribute('allowfullscreen', 'true');
-                    container.appendChild(iframe);
+                    // Create description
+                    const description = document.createElement('p');
+                    description.textContent = 'Due to embedding restrictions, the iOS emulator needs to be opened in a separate window.';
+                    infoDiv.appendChild(description);
                     
-                    console.log('Appetize iframe added to DOM');
+                    // Create button
+                    const button = document.createElement('button');
+                    button.id = 'open-appetize-btn';
+                    button.textContent = 'Open iOS Emulator';
+                    button.style.padding = '10px 20px';
+                    button.style.backgroundColor = '#0078D4';
+                    button.style.color = 'white';
+                    button.style.border = 'none';
+                    button.style.borderRadius = '4px';
+                    button.style.cursor = 'pointer';
+                    button.style.marginTop = '20px';
+                    infoDiv.appendChild(button);
+                    
+                    // Add the info div to the container
+                    container.appendChild(infoDiv);
+                    
+                    // Add event listener to the button
+                    document.getElementById('open-appetize-btn').addEventListener('click', function() {
+                        window.open(message.url, '_blank');
+                    });
                     
                     console.log('Appetize button added to DOM');
                 }
@@ -358,7 +377,7 @@ function startAndroidEmulator(panel) {
 
 // Load an Appetize.io iOS emulator
 function loadAppetizeEmulator(panel, deviceType = 'iphone15pro') {
-    // Using a working public key for the demo app
+    // Using Appetize's official demo app key
     const appetizePublicKey = 'demo';
     const deviceMap = {
         'iphone15pro': 'iphone15pro',
@@ -368,8 +387,8 @@ function loadAppetizeEmulator(panel, deviceType = 'iphone15pro') {
     };
     
     const device = deviceMap[deviceType] || 'iphone15pro';
-    // Using the simplest possible URL format for maximum compatibility
-    const appetizeUrl = `https://appetize.io/embed/${appetizePublicKey}?device=${device}&scale=75&autoplay=true`;
+    // Using the direct Appetize URL format that works with embedding restrictions
+    const appetizeUrl = `https://appetize.io/app/${appetizePublicKey}?device=${device}&scale=75&orientation=portrait&osVersion=17.0&autoplay=true`;
     
     console.log(`Loading Appetize iOS emulator for device: ${device} with URL: ${appetizeUrl}`);
     

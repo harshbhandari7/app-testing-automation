@@ -80,7 +80,7 @@ function getWebviewContent() {
             .platform-btn { background-color: #f0f0f0; color: #333; }
             .platform-btn.active { background-color: #0078D4; color: white; }
             .device-select { padding: 5px; margin: 5px; }
-            #appetize-container { min-height: 800px; display: flex; flex-direction: column; align-items: center; }
+            #appetize-container { height: 700px; display: flex; flex-direction: column; align-items: center; }
         </style>
     </head>
     <body>
@@ -198,18 +198,18 @@ function getWebviewContent() {
                     container.innerHTML = '';
                     
                     // Create heading
-                    // const heading = document.createElement('h3');
-                    // heading.textContent = 'iOS Emulator (' + message.device + ')';
-                    // heading.style.textAlign = 'center';
-                    // heading.style.margin = '0 0 10px 0';
-                    // container.appendChild(heading);
+                    const heading = document.createElement('h3');
+                    heading.textContent = 'iOS Emulator (' + message.device + ')';
+                    heading.style.textAlign = 'center';
+                    heading.style.margin = '0 0 10px 0';
+                    container.appendChild(heading);
                     
                     // Create iframe
                     const iframe = document.createElement('iframe');
                     iframe.src = message.url;
                     iframe.className = 'emulator-frame';
                     iframe.style.width = '100%';
-                    iframe.style.height = '800px';
+                    iframe.style.height = '500px';
                     iframe.style.border = 'none';
                     iframe.allow = 'camera; microphone; autoplay; clipboard-write';
                     iframe.setAttribute('allowfullscreen', 'true');
