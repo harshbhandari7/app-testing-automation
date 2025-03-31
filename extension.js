@@ -1,6 +1,17 @@
 const vscode = require('vscode');
 const { exec, spawn } = require('child_process');
 const https = require('https');
+const path = require('path');
+const fs = require('fs');
+
+const envPath = path.resolve(__dirname, '.env');
+if (fs.existsSync(envPath)) {
+    const dotenv = require('dotenv');
+    dotenv.config({ path: envPath });
+    console.log('.env loaded manually');
+} else {
+    console.log('.env file not found');
+}
 
 function activate(context) {
     let welcomeNotif = vscode.commands.registerCommand('app-testing-automation.helloWorld', function () {
@@ -358,8 +369,7 @@ function startAndroidEmulator(panel) {
 
 // Load an Appetize.io iOS emulator
 function loadAppetizeEmulator(panel, deviceType = 'iphone15pro') {
-    // Using a working public key for the demo app
-    const appetizePublicKey = 'demo';
+    const appetizeBuildID = process.env.APPETIZE_IOS_BUILD_ID || 'demo';
     const deviceMap = {
         'iphone15pro': 'iphone15pro',
         'iphone14': 'iphone14',
@@ -369,7 +379,7 @@ function loadAppetizeEmulator(panel, deviceType = 'iphone15pro') {
     
     const device = deviceMap[deviceType] || 'iphone15pro';
     // Using the simplest possible URL format for maximum compatibility
-    const appetizeUrl = `https://appetize.io/embed/${appetizePublicKey}?device=${device}&scale=75&autoplay=true`;
+    const appetizeUrl = `https://appetize.io/embed/${appetizeBuildID}?device=${device}&scale=75&autoplay=true`;
     
     console.log(`Loading Appetize iOS emulator for device: ${device} with URL: ${appetizeUrl}`);
     
