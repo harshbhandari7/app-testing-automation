@@ -42,7 +42,7 @@ function activate(context) {
                 switch (message.command) {
                     case 'runTestScript':
                         if (message.script) {
-                            executeCommands(message.script, panel);
+                            executeAdbCommands(message.script, panel);
                         } else {
                             vscode.window.showErrorMessage('No script provided');
                         }
@@ -73,7 +73,7 @@ function getWebviewContent() {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src https: data:; script-src 'unsafe-inline' 'unsafe-eval' https://appetize.io https://*.appetize.io; style-src 'unsafe-inline'; frame-src https://appetize.io https://*.appetize.io https://demo.appetize.io;">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src https: data:; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; frame-src https://appetize.io https://*.appetize.io https://demo.appetize.io;">
         <title>Mobile Automation</title>
         <style>
             body { display: flex; height: 100vh; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
@@ -94,21 +94,12 @@ function getWebviewContent() {
             .appetize-container { min-height: 900px; display: flex; flex-direction: column; align-items: center; }
             .ios-emulators-wrapper { display: flex; justify-content: space-between; }
             .ios-emulator-container { width: 48%; }
-            .help-text { font-size: 12px; color: #666; margin-top: 5px; margin-bottom: 10px; }
         </style>
     </head>
     <body>
         <div class="left-panel">
             <div class="panel">	
                 <h3>Test Script Editor</h3>
-                <div class="help-text">
-                    <strong>Command Examples:</strong><br/>
-                    1. <code>tap 100 200 ios1</code> - Tap at x=100, y=200 on iOS emulator 1<br/>
-                    2. <code>tap 150 300 ios2</code> - Tap at x=150, y=300 on iOS emulator 2<br/>
-                    3. <code>tap 200 400 android</code> - Tap at x=200, y=400 on Android emulator<br/>
-                    4. <code>sleep 2</code> - Wait for 2 seconds<br/>
-                    5. <code>adb shell input tap 100 200</code> - Direct ADB command
-                </div>
                 <textarea id="script" rows="18" cols="70"></textarea>
                 <button onclick="runTest()">Run</button>
             </div>
@@ -170,54 +161,10 @@ function getWebviewContent() {
         </div>
         <script>
             const vscode = acquireVsCodeApi();
-            let appetizeInstances = {
-                1: null,
-                2: null
-            };
-            
-            // Add script for Appetize client
-            function loadAppetizeClientScript() {
-                if (!window.appetizeScriptAdded) {
-                    const script = document.createElement('script');
-                    script.src = 'https://appetize.io/embed/client.js';
-                    script.onload = function() {
-                        console.log('Appetize client script loaded successfully');
-                        document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Appetize client script loaded successfully\`;
-                        
-                        // Try to initialize any existing iframes
-                        setTimeout(() => {
-                            initializeAppetizeClients();
-                        }, 1500);
-                    };
-                    script.onerror = function() {
-                        console.error('Failed to load Appetize client script');
-                        document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Failed to load Appetize client script\`;
-                    };
-                    document.head.appendChild(script);
-                    window.appetizeScriptAdded = true;
-                }
-            }
-            
-            // Function to initialize Appetize clients for existing iframes
-            function initializeAppetizeClients() {
-                for (let i = 1; i <= 2; i++) {
-                    const iframe = document.querySelector(\`#appetize-container-\${i} iframe\`);
-                    if (iframe && window.appetize && window.appetize.getClient) {
-                        try {
-                            appetizeInstances[i] = window.appetize.getClient(iframe);
-                            document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Appetize client initialized for emulator \${i}\`;
-                        } catch (e) {
-                            document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Error initializing Appetize client for emulator \${i}: \${e.message}\`;
-                        }
-                    }
-                }
-            }
             
             // Auto-load iOS emulators on page load
             window.addEventListener('DOMContentLoaded', function() {
                 console.log('DOM loaded, loading iOS emulators');
-                // Load Appetize client script first
-                loadAppetizeClientScript();
                 // Default to iOS platform
                 switchPlatform('ios');
                 // Auto-load both iOS emulators
@@ -266,47 +213,6 @@ function getWebviewContent() {
                 });
             }
 
-            function waitForAppetizeClient(emulatorId, retries = 10, delay = 1000) {
-                return new Promise((resolve, reject) => {
-                    const tryInit = (attempt) => {
-                        const iframe = document.querySelector(\`#appetize-container-\${emulatorId} iframe\`);
-                        if (!iframe) {
-                            console.warn(\`Iframe not found for emulator \${emulatorId}, retrying... (\${attempt + 1}/\${retries})\`);
-                            if (attempt < retries) return setTimeout(() => tryInit(attempt + 1), delay);
-                            return reject(new Error('Appetize iframe not available'));
-                        }
-
-                        if (window.appetize && typeof window.appetize.getClient === 'function') {
-                            try {
-                                const client = window.appetize.getClient(iframe);
-                                resolve(client);
-                            } catch (err) {
-                                console.warn(\`Failed to get Appetize client: \${err.message}\`);
-                                if (attempt < retries) return setTimeout(() => tryInit(attempt + 1), delay);
-                                return reject(new Error('Appetize client not available after retries'));
-                            }
-                        } else {
-                            console.warn('Appetize script not ready, retrying...');
-                            if (attempt < retries) return setTimeout(() => tryInit(attempt + 1), delay);
-                            return reject(new Error('Appetize client not available'));
-                        }
-                    };
-
-                    tryInit(0);
-                });
-            }
-
-
-            // Function to handle tap events for Appetize emulators
-            function performTapOnAppetize(emulatorId, x, y) {
-                waitForAppetizeClient(emulatorId).then(client => {
-                    client.tap(x, y);
-                    document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Tapped at \${x},\${y} on iOS emulator \${emulatorId}\`;
-                }).catch(err => {
-                    document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Error: \${err.message}\`;
-                });
-            }
-
             window.addEventListener('message', event => {
                 const message = event.data;
                 console.log('Received message:', message);
@@ -337,153 +243,40 @@ function getWebviewContent() {
                     iframe.style.border = 'none';
                     iframe.allow = 'camera; microphone; autoplay; clipboard-write';
                     iframe.setAttribute('allowfullscreen', 'true');
-                    
-                    // Set up onload handler to initialize Appetize client
-                    iframe.onload = function() {
-                        // Give the iframe some time to fully initialize
-                        setTimeout(() => {
-                            if (window.appetize && window.appetize.getClient) {
-                                try {
-                                    appetizeInstances[emulatorId] = window.appetize.getClient(iframe);
-                                    document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Appetize client initialized for emulator \${emulatorId}\`;
-                                } catch (e) {
-                                    document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Error initializing Appetize client: \${e.message}\`;
-                                }
-                            } else {
-                                document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Appetize client not available yet. Will retry when needed.\`;
-                            }
-                        }, 1000);
-                    };
-                    
                     container.appendChild(iframe);
                     
-                    // Load Appetize client script if not already loaded
-                    loadAppetizeClientScript();
                 }
                 
                 if (message.type === 'switch-platform') {
                     switchPlatform(message.platform);
                 }
-                
-                if (message.type === 'perform-tap') {
-                    const { target, x, y } = message;
-                    
-                    if (target.startsWith('ios')) {
-                        const emulatorId = target === 'ios1' ? 1 : 2;
-                        performTapOnAppetize(emulatorId, x, y);
-                    }
-                }
             });
             
             // Immediately load both iOS emulators when the page loads
-            // window.onload = function() {
-            //     console.log('Window loaded, auto-loading iOS emulators');
-            //     loadAppetizeClientScript();
-            //     loadAppetizeEmulator(1);
-            //     loadAppetizeEmulator(2);
-            // };
+            window.onload = function() {
+                console.log('Window loaded, auto-loading iOS emulators');
+                loadAppetizeEmulator(1);
+                loadAppetizeEmulator(2);
+            };
         </script>
     </body>
     </html>`;
 }
 
-// Parse and execute commands
-function executeCommands(script, panel) {
+function executeAdbCommands(script, panel) {
     const commands = script.split('\n');
-    
-    // Process commands sequentially
-    let index = 0;
-    
-    function processNextCommand() {
-        if (index >= commands.length) {
-            return;
-        }
-        
-        const command = commands[index].trim();
-        index++;
-        
-        if (!command || command.startsWith('//') || command.startsWith('#')) {
-            // Skip empty lines and comments
-            processNextCommand();
-            return;
-        }
-        
-        // Log the command being processed
-        panel.webview.postMessage({ type: 'log', content: `\n${new Date().toISOString()}: Executing command: ${command}` });
-        
-        // Check for special commands
-        if (command.startsWith('tap ')) {
-            // Format: tap x y target
-            // Example: tap 100 200 ios1
-            const parts = command.split(' ');
-            if (parts.length >= 4) {
-                const x = parseInt(parts[1]);
-                const y = parseInt(parts[2]);
-                const target = parts[3].toLowerCase();
-                
-                if (target === 'ios1' || target === 'ios2') {
-                    // Send tap command to webview for iOS emulator
-                    panel.webview.postMessage({
-                        type: 'perform-tap',
-                        target: target,
-                        x: x,
-                        y: y
-                    });
-                    
-                    // Wait a short time before processing the next command
-                    setTimeout(processNextCommand, 500);
-                } else if (target === 'android') {
-                    // Use ADB for Android
-                    const adbCommand = `input tap ${x} ${y}`;
-                    executeAdbCommand(adbCommand, panel, processNextCommand);
-                } else {
-                    panel.webview.postMessage({ type: 'log', content: `\n${new Date().toISOString()}: Invalid tap target: ${target}. Use ios1, ios2, or android` });
-                    processNextCommand();
-                }
+    commands.forEach(command => {
+        exec(`adb shell ${command}`, (error, stdout, stderr) => {
+            if (error) {
+                vscode.window.showErrorMessage(`ADB Error: ${stderr}`);
+                panel.webview.postMessage({ type: 'log', content: `\n${new Date().toISOString()}: Command '${command}' Failed with error ${stderr}` });
             } else {
-                panel.webview.postMessage({ type: 'log', content: `\n${new Date().toISOString()}: Invalid tap command format. Use: tap x y target` });
-                processNextCommand();
+                console.log(' --- STD OUT ---', { stdout });
+                vscode.window.showInformationMessage(`ADB Output: ${stdout}`);
+                panel.webview.postMessage({ type: 'log', content: `\n${new Date().toISOString()}: Command '${command}' ran successfully.` });
+                panel.webview.postMessage({ type: 'log', content: `Output for Command '${command}': ${stdout}` });
             }
-        } else if (command.startsWith('sleep ')) {
-            // Format: sleep seconds
-            // Example: sleep 2
-            const seconds = parseFloat(command.split(' ')[1]);
-            if (!isNaN(seconds)) {
-                panel.webview.postMessage({ type: 'log', content: `\n${new Date().toISOString()}: Sleeping for ${seconds} seconds` });
-                setTimeout(processNextCommand, seconds * 1000);
-            } else {
-                panel.webview.postMessage({ type: 'log', content: `\n${new Date().toISOString()}: Invalid sleep command. Use: sleep seconds` });
-                processNextCommand();
-            }
-        } else if (command.startsWith('adb ')) {
-            // Direct ADB command
-            executeAdbCommand(command.substring(4), panel, processNextCommand);
-        } else {
-            // Assume it's an ADB shell command for backward compatibility
-            executeAdbCommand(`shell ${command}`, panel, processNextCommand);
-        }
-    }
-    
-    // Start processing commands
-    processNextCommand();
-}
-
-// Execute a single ADB command with callback for sequencing
-function executeAdbCommand(command, panel, callback) {
-    exec(`adb ${command}`, (error, stdout, stderr) => {
-        if (error) {
-            vscode.window.showErrorMessage(`ADB Error: ${stderr}`);
-            panel.webview.postMessage({ type: 'log', content: `\n${new Date().toISOString()}: Command 'adb ${command}' Failed with error ${stderr}` });
-        } else {
-            console.log(' --- STD OUT ---', { stdout });
-            panel.webview.postMessage({ type: 'log', content: `\n${new Date().toISOString()}: Command 'adb ${command}' ran successfully.` });
-            panel.webview.postMessage({ type: 'log', content: `Output: ${stdout}` });
-        }
-        
-        // Continue with next command
-        if (callback) {
-            setTimeout(callback, 300);
-        }
+        });
     });
 }
 
@@ -606,8 +399,7 @@ function loadAppetizeEmulator(panel, deviceType = 'iphone15pro', emulatorId = 1)
     
     const device = deviceMap[deviceType] || 'iphone15pro';
     // Using the simplest possible URL format for maximum compatibility
-    // Added postMessageEnabled=true to allow JavaScript communication with the iframe
-    const appetizeUrl = `https://appetize.io/embed/${appetizeBuildID}?device=${device}&scale=75&autoplay=true&postMessageEnabled=true`;
+    const appetizeUrl = `https://appetize.io/embed/${appetizeBuildID}?device=${device}&scale=75&autoplay=true`;
     
     console.log(`Loading Appetize iOS emulator ${emulatorId} for device: ${device} with URL: ${appetizeUrl}`);
     
@@ -617,17 +409,27 @@ function loadAppetizeEmulator(panel, deviceType = 'iphone15pro', emulatorId = 1)
         content: `\n${new Date().toISOString()}: Loading iOS emulator ${emulatorId} (${device}) via Appetize.io...`
     });
     
-    // Send the embed URL to the webview to be rendered
-    panel.webview.postMessage({
-        type: 'appetize-emulator',
+    // Send the appetize emulator message
+    panel.webview.postMessage({ 
+        type: 'appetize-emulator', 
         url: appetizeUrl,
+        device: device,
         emulatorId: emulatorId
+    });
+    
+    // Also send message to switch UI to iOS mode
+    panel.webview.postMessage({ 
+        type: 'switch-platform', 
+        platform: 'ios'
+    });
+    
+    // Log that we've sent the message
+    panel.webview.postMessage({ 
+        type: 'log', 
+        content: `\n${new Date().toISOString()}: Appetize emulator ${emulatorId} iframe created for ${device}`
     });
 }
 
 function deactivate() {}
 
-module.exports = {
-    activate,
-    deactivate
-};
+module.exports = { activate, deactivate };

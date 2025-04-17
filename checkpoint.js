@@ -73,7 +73,7 @@ function getWebviewContent() {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src https: data:; script-src 'unsafe-inline' 'unsafe-eval' https://appetize.io https://*.appetize.io; style-src 'unsafe-inline'; frame-src https://appetize.io https://*.appetize.io https://demo.appetize.io;">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src https: data:; script-src 'unsafe-inline' 'unsafe-eval'; style-src 'unsafe-inline'; frame-src https://appetize.io https://*.appetize.io https://demo.appetize.io;">
         <title>Mobile Automation</title>
         <style>
             body { display: flex; height: 100vh; margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; }
@@ -170,54 +170,11 @@ function getWebviewContent() {
         </div>
         <script>
             const vscode = acquireVsCodeApi();
-            let appetizeInstances = {
-                1: null,
-                2: null
-            };
-            
-            // Add script for Appetize client
-            function loadAppetizeClientScript() {
-                if (!window.appetizeScriptAdded) {
-                    const script = document.createElement('script');
-                    script.src = 'https://appetize.io/embed/client.js';
-                    script.onload = function() {
-                        console.log('Appetize client script loaded successfully');
-                        document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Appetize client script loaded successfully\`;
-                        
-                        // Try to initialize any existing iframes
-                        setTimeout(() => {
-                            initializeAppetizeClients();
-                        }, 1500);
-                    };
-                    script.onerror = function() {
-                        console.error('Failed to load Appetize client script');
-                        document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Failed to load Appetize client script\`;
-                    };
-                    document.head.appendChild(script);
-                    window.appetizeScriptAdded = true;
-                }
-            }
-            
-            // Function to initialize Appetize clients for existing iframes
-            function initializeAppetizeClients() {
-                for (let i = 1; i <= 2; i++) {
-                    const iframe = document.querySelector(\`#appetize-container-\${i} iframe\`);
-                    if (iframe && window.appetize && window.appetize.getClient) {
-                        try {
-                            appetizeInstances[i] = window.appetize.getClient(iframe);
-                            document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Appetize client initialized for emulator \${i}\`;
-                        } catch (e) {
-                            document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Error initializing Appetize client for emulator \${i}: \${e.message}\`;
-                        }
-                    }
-                }
-            }
+            let appetizeInstances = {};
             
             // Auto-load iOS emulators on page load
             window.addEventListener('DOMContentLoaded', function() {
                 console.log('DOM loaded, loading iOS emulators');
-                // Load Appetize client script first
-                loadAppetizeClientScript();
                 // Default to iOS platform
                 switchPlatform('ios');
                 // Auto-load both iOS emulators
@@ -265,46 +222,40 @@ function getWebviewContent() {
                     emulatorId: emulatorId
                 });
             }
-
-            function waitForAppetizeClient(emulatorId, retries = 10, delay = 1000) {
-                return new Promise((resolve, reject) => {
-                    const tryInit = (attempt) => {
-                        const iframe = document.querySelector(\`#appetize-container-\${emulatorId} iframe\`);
-                        if (!iframe) {
-                            console.warn(\`Iframe not found for emulator \${emulatorId}, retrying... (\${attempt + 1}/\${retries})\`);
-                            if (attempt < retries) return setTimeout(() => tryInit(attempt + 1), delay);
-                            return reject(new Error('Appetize iframe not available'));
-                        }
-
-                        if (window.appetize && typeof window.appetize.getClient === 'function') {
-                            try {
-                                const client = window.appetize.getClient(iframe);
-                                resolve(client);
-                            } catch (err) {
-                                console.warn(\`Failed to get Appetize client: \${err.message}\`);
-                                if (attempt < retries) return setTimeout(() => tryInit(attempt + 1), delay);
-                                return reject(new Error('Appetize client not available after retries'));
-                            }
-                        } else {
-                            console.warn('Appetize script not ready, retrying...');
-                            if (attempt < retries) return setTimeout(() => tryInit(attempt + 1), delay);
-                            return reject(new Error('Appetize client not available'));
-                        }
-                    };
-
-                    tryInit(0);
-                });
-            }
-
-
+            
             // Function to handle tap events for Appetize emulators
             function performTapOnAppetize(emulatorId, x, y) {
-                waitForAppetizeClient(emulatorId).then(client => {
-                    client.tap(x, y);
-                    document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Tapped at \${x},\${y} on iOS emulator \${emulatorId}\`;
-                }).catch(err => {
-                    document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Error: \${err.message}\`;
-                });
+                console.log(\`Attempting to tap at \${x},\${y} on iOS emulator \${emulatorId}\`);
+                const iframe = document.querySelector(\`#appetize-container-\${emulatorId} iframe\`);
+                
+                if (iframe) {
+                    // Use the Appetize client to tap
+                    if (window.appetize && window.appetize.getClient) {
+                        const client = window.appetize.getClient(iframe);
+                        if (client) {
+                            client.tap(x, y);
+                            document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Tapped at \${x},\${y} on iOS emulator \${emulatorId}\`;
+                            return true;
+                        }
+                    }
+                    
+                    // Fallback method - send postMessage to iframe
+                    try {
+                        iframe.contentWindow.postMessage({
+                            type: 'tap',
+                            x: x,
+                            y: y
+                        }, '*');
+                        document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Sent tap message to iOS emulator \${emulatorId} at \${x},\${y}\`;
+                        return true;
+                    } catch (e) {
+                        document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Error sending tap to iOS emulator \${emulatorId}: \${e.message}\`;
+                        return false;
+                    }
+                } else {
+                    document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Error: iOS emulator \${emulatorId} iframe not found\`;
+                    return false;
+                }
             }
 
             window.addEventListener('message', event => {
@@ -337,28 +288,15 @@ function getWebviewContent() {
                     iframe.style.border = 'none';
                     iframe.allow = 'camera; microphone; autoplay; clipboard-write';
                     iframe.setAttribute('allowfullscreen', 'true');
-                    
-                    // Set up onload handler to initialize Appetize client
-                    iframe.onload = function() {
-                        // Give the iframe some time to fully initialize
-                        setTimeout(() => {
-                            if (window.appetize && window.appetize.getClient) {
-                                try {
-                                    appetizeInstances[emulatorId] = window.appetize.getClient(iframe);
-                                    document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Appetize client initialized for emulator \${emulatorId}\`;
-                                } catch (e) {
-                                    document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Error initializing Appetize client: \${e.message}\`;
-                                }
-                            } else {
-                                document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Appetize client not available yet. Will retry when needed.\`;
-                            }
-                        }, 1000);
-                    };
-                    
                     container.appendChild(iframe);
                     
-                    // Load Appetize client script if not already loaded
-                    loadAppetizeClientScript();
+                    // Add Appetize client script if not already added
+                    if (!window.appetizeScriptAdded) {
+                        const script = document.createElement('script');
+                        script.src = 'https://appetize.io/embed/client.js';
+                        document.head.appendChild(script);
+                        window.appetizeScriptAdded = true;
+                    }
                 }
                 
                 if (message.type === 'switch-platform') {
@@ -376,12 +314,11 @@ function getWebviewContent() {
             });
             
             // Immediately load both iOS emulators when the page loads
-            // window.onload = function() {
-            //     console.log('Window loaded, auto-loading iOS emulators');
-            //     loadAppetizeClientScript();
-            //     loadAppetizeEmulator(1);
-            //     loadAppetizeEmulator(2);
-            // };
+            window.onload = function() {
+                console.log('Window loaded, auto-loading iOS emulators');
+                loadAppetizeEmulator(1);
+                loadAppetizeEmulator(2);
+            };
         </script>
     </body>
     </html>`;
@@ -617,17 +554,27 @@ function loadAppetizeEmulator(panel, deviceType = 'iphone15pro', emulatorId = 1)
         content: `\n${new Date().toISOString()}: Loading iOS emulator ${emulatorId} (${device}) via Appetize.io...`
     });
     
-    // Send the embed URL to the webview to be rendered
-    panel.webview.postMessage({
-        type: 'appetize-emulator',
+    // Send the appetize emulator message
+    panel.webview.postMessage({ 
+        type: 'appetize-emulator', 
         url: appetizeUrl,
+        device: device,
         emulatorId: emulatorId
+    });
+    
+    // Also send message to switch UI to iOS mode
+    panel.webview.postMessage({ 
+        type: 'switch-platform', 
+        platform: 'ios'
+    });
+    
+    // Log that we've sent the message
+    panel.webview.postMessage({ 
+        type: 'log', 
+        content: `\n${new Date().toISOString()}: Appetize emulator ${emulatorId} iframe created for ${device}`
     });
 }
 
 function deactivate() {}
 
-module.exports = {
-    activate,
-    deactivate
-};
+module.exports = { activate, deactivate };

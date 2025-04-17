@@ -185,9 +185,7 @@ function getWebviewContent() {
                         document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Appetize client script loaded successfully\`;
                         
                         // Try to initialize any existing iframes
-                        setTimeout(() => {
-                            initializeAppetizeClients();
-                        }, 1500);
+                        initializeAppetizeClients();
                     };
                     script.onerror = function() {
                         console.error('Failed to load Appetize client script');
@@ -265,46 +263,55 @@ function getWebviewContent() {
                     emulatorId: emulatorId
                 });
             }
-
-            function waitForAppetizeClient(emulatorId, retries = 10, delay = 1000) {
-                return new Promise((resolve, reject) => {
-                    const tryInit = (attempt) => {
-                        const iframe = document.querySelector(\`#appetize-container-\${emulatorId} iframe\`);
-                        if (!iframe) {
-                            console.warn(\`Iframe not found for emulator \${emulatorId}, retrying... (\${attempt + 1}/\${retries})\`);
-                            if (attempt < retries) return setTimeout(() => tryInit(attempt + 1), delay);
-                            return reject(new Error('Appetize iframe not available'));
-                        }
-
-                        if (window.appetize && typeof window.appetize.getClient === 'function') {
-                            try {
-                                const client = window.appetize.getClient(iframe);
-                                resolve(client);
-                            } catch (err) {
-                                console.warn(\`Failed to get Appetize client: \${err.message}\`);
-                                if (attempt < retries) return setTimeout(() => tryInit(attempt + 1), delay);
-                                return reject(new Error('Appetize client not available after retries'));
-                            }
-                        } else {
-                            console.warn('Appetize script not ready, retrying...');
-                            if (attempt < retries) return setTimeout(() => tryInit(attempt + 1), delay);
-                            return reject(new Error('Appetize client not available'));
-                        }
-                    };
-
-                    tryInit(0);
-                });
-            }
-
-
+            
             // Function to handle tap events for Appetize emulators
             function performTapOnAppetize(emulatorId, x, y) {
-                waitForAppetizeClient(emulatorId).then(client => {
-                    client.tap(x, y);
-                    document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Tapped at \${x},\${y} on iOS emulator \${emulatorId}\`;
-                }).catch(err => {
-                    document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Error: \${err.message}\`;
-                });
+                console.log(\`Attempting to tap at \${x},\${y} on iOS emulator \${emulatorId}\`);
+                
+                // Check if we have an active client instance
+                if (appetizeInstances[emulatorId]) {
+                    try {
+                        // Use the Appetize client API to tap
+                        appetizeInstances[emulatorId].tap(x, y);
+                        document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Tapped at \${x},\${y} on iOS emulator \${emulatorId} using Appetize client\`;
+                        return true;
+                    } catch (e) {
+                        document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Error using Appetize client for tap: \${e.message}\`;
+                    }
+                }
+                
+                // Fallback to iframe and try to reinitialize the client
+                const iframe = document.querySelector(\`#appetize-container-\${emulatorId} iframe\`);
+                if (iframe) {
+                    // Try to (re)initialize the client if it's not working
+                    if (window.appetize && window.appetize.getClient) {
+                        try {
+                            appetizeInstances[emulatorId] = window.appetize.getClient(iframe);
+                            appetizeInstances[emulatorId].tap(x, y);
+                            document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Tapped at \${x},\${y} on iOS emulator \${emulatorId} using reinitialized client\`;
+                            return true;
+                            } catch (e) {
+                            document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Error reinitializing Appetize client: \${e.message}\`;
+                        }
+                    }
+                    
+                    // Last resort - try postMessage directly to the iframe
+                    try {
+                        iframe.contentWindow.postMessage({
+                            type: 'tap',
+                            x: x,
+                            y: y
+                        }, '*');
+                        document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Sent direct postMessage tap to iOS emulator \${emulatorId} at \${x},\${y}\`;
+                        return true;
+                    } catch (e) {
+                        document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Error sending tap to iOS emulator \${emulatorId}: \${e.message}\`;
+                        return false;
+                    }
+                } else {
+                    document.getElementById('logs').textContent += \`\\n\${new Date().toISOString()}: Error: iOS emulator \${emulatorId} iframe not found\`;
+                    return false;
+                }
             }
 
             window.addEventListener('message', event => {
@@ -376,12 +383,12 @@ function getWebviewContent() {
             });
             
             // Immediately load both iOS emulators when the page loads
-            // window.onload = function() {
-            //     console.log('Window loaded, auto-loading iOS emulators');
-            //     loadAppetizeClientScript();
-            //     loadAppetizeEmulator(1);
-            //     loadAppetizeEmulator(2);
-            // };
+            window.onload = function() {
+                console.log('Window loaded, auto-loading iOS emulators');
+                loadAppetizeClientScript();
+                loadAppetizeEmulator(1);
+                loadAppetizeEmulator(2);
+            };
         </script>
     </body>
     </html>`;
